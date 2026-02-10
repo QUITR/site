@@ -1,0 +1,1393 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Soru Çözüm Uygulaması (Tek Dosya)</title>
+  <style>
+    :root {
+      --bg-main: #181c24;
+      --bg-card: #232837;
+      --border: #333a4d;
+      --text: #f3f6fa;
+      --text-light: #bfc7d5;
+      --primary: #5b8cff;
+      --accent: #ffb347;
+      --danger: #ff5c5c;
+      --success: #4caf50;
+      --input-bg: #232837;
+      --input-border: #3a4157;
+    }
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg-main); margin: 0; color: var(--text); }
+    .container { max-width: 900px; margin: 30px auto; background: var(--bg-card); padding: 28px 18px; border-radius: 16px; box-shadow: 0 4px 32px #0006; overflow-x: auto; }
+    h1 { text-align: center; color: var(--primary); letter-spacing: 1px; font-weight: 700; }
+    h2, h3 { color: var(--accent); margin-top: 18px; }
+    .flex { display: flex; gap: 24px; }
+    .question-img { max-width: 100%; height: auto; border: 2px solid var(--border); margin-bottom: 8px; border-radius: 8px; background: #222; }
+    .canvas-wrap, .canvas-overlay {
+      border: 2px solid var(--border); margin-bottom: 8px;
+      width: 100%; max-width: 800px;
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-left: auto;
+      margin-right: auto;
+      overflow-x: auto;
+      overflow-y: auto;
+      background: #232837;
+      height: auto;
+      max-height: 70vw;
+      border-radius: 12px;
+    }
+    .canvas-wrap canvas, .canvas-overlay canvas {
+      width: 100% !important;
+      max-width: 800px;
+      height: auto !important;
+      max-height: 60vw;
+      display: block;
+      background: transparent;
+      border-radius: 12px;
+    }
+    .btn {
+      padding: 12px 22px; margin: 4px; border-radius: 8px; border: none;
+      background: var(--primary); color: #fff; cursor: pointer; font-size: 1rem;
+      font-weight: 500;
+      box-shadow: 0 2px 8px #0002;
+      transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+    }
+    .btn:disabled { background: #555a; color: #ccc; }
+    .btn:hover:not(:disabled) { background: var(--accent); color: #222; box-shadow: 0 4px 16px #0003; }
+    .input {
+      margin: 4px 0; padding: 10px; border-radius: 6px;
+      border: 1.5px solid var(--input-border); font-size: 1rem;
+      background: var(--input-bg); color: var(--text);
+      outline: none;
+      transition: border 0.2s, box-shadow 0.2s;
+      box-shadow: 0 1px 4px #0001;
+    }
+    .input:focus { border: 1.5px solid var(--primary); box-shadow: 0 2px 8px #5b8cff33; }
+    .question-list { margin-top: 16px; }
+    .question-item {
+      background: #232837ee; margin-bottom: 12px; padding: 14px; border-radius: 12px;
+      display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+      border: 2px solid var(--border);
+      box-shadow: 0 2px 8px #0002;
+    }
+    .solution-history { margin-top: 16px; }
+    .solution-canvas { border: 2px solid var(--border); margin-bottom: 8px; max-width: 100%; height: auto; border-radius: 10px; }
+    .palette-btn {
+      width: 32px; height: 32px; border-radius: 50%; border: 2px solid #fff3; margin-right: 6px; display: inline-block; cursor: pointer;
+      outline: none; transition: border 0.2s;
+    }
+    .palette-btn.selected, .palette-btn:focus { border: 2.5px solid var(--accent); }
+    @media (max-width: 900px) {
+      .container { max-width: 100vw; padding: 8px; }
+      .canvas-wrap, .canvas-overlay { max-width: 100vw; }
+    }
+    @media (max-width: 600px) {
+      h1 { font-size: 1.2rem; }
+      .btn, .input { font-size: 0.95rem; padding: 10px 8px; }
+      .question-item { flex-direction: column; gap: 4px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Soru Çözüm Uygulaması</h1>
+    <div id="loadingMessage" style="text-align:center; color: var(--text-light); margin: 20px 0;">
+      <p>⏳ Veriler yükleniyor...</p>
+    </div>
+    <div id="statusBar" style="text-align:center; color: var(--text-light); margin: 8px 0; font-size: 0.9rem; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 6px; display:none;"></div>
+    <div id="app" style="display:none;"></div>
+  </div>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+  <script>
+    // Firebase konfigürasyonu - GERÇEK CONFIG
+    const firebaseConfig = {
+      apiKey: "AIzaSyBhXBhoPwJC_iP3gFDXB5h2qK5Ry2DKJAo",
+      authDomain: "mistakes-548c3.firebaseapp.com",
+      databaseURL: "https://mistakes-548c3-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "mistakes-548c3",
+      storageBucket: "mistakes-548c3.firebasestorage.app",
+      messagingSenderId: "1044794187200",
+      appId: "1:1044794187200:web:67c977441b184a5560bc25"
+    };
+
+    // Firebase'i başlat
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+    const auth = firebase.auth();
+
+    // Soru veri yapısı: {id, img, subject, topic, answer, level, solutions: [{draw, isCorrect, date}]}
+    const app = document.getElementById('app');
+    const loadingMessage = document.getElementById('loadingMessage');
+    const statusBar = document.getElementById('statusBar');
+    let questions = [];
+    let currentUser = null;
+    let syncInProgress = false;
+    let selected = null;
+    let mode = 'list'; // 'list', 'add', 'solve', 'history'
+    let examQuestions = [];
+    let examIndex = 0;
+    let examResults = [];
+    let lastSubject = '';
+    let lastTopic = '';
+    let selectedAnswer = null;
+    // Bu oturumda eklenen soruları takip et (renderAdd altında gösterilecek)
+    let addedThisSession = [];
+
+    // TÜM CİHAZLAR AYNI VERİLERİ GÖRSÜN DIYE SABIT UID KULLAN
+    const SHARED_UID = "shared-questions";
+    
+    // Sınav zamanlaması
+    let examStartTime = null;
+    let timerInterval = null;
+    
+    // Sıralama seçeneği
+    let sortOption = 'newest'; // 'newest', 'oldest', 'mostSolved'
+
+    // Status bar'ı güncelle
+    function updateStatusBar() {
+      const dataSize = JSON.stringify(questions).length;
+      const sizeMB = (dataSize / 1024 / 1024).toFixed(2);
+      const sizePercent = ((dataSize / (16 * 1024 * 1024)) * 100).toFixed(1);
+      const status = syncInProgress ? '⏳ Senkronizasyon...' : '✓ Hazır';
+      statusBar.innerHTML = `${status} | 📊 ${questions.length} soru | 💾 ${sizeMB}MB (${sizePercent}% Firebase limiti)`;
+      statusBar.style.display = questions.length > 0 ? 'block' : 'none';
+    }
+
+    // UI durumunu güncelle (buton disable/enable vb.)
+    function updateUIState() {
+      try {
+        const addBtn = document.getElementById('addBtn');
+        const importBtn = document.getElementById('importBtn');
+        const exportBtn = document.getElementById('exportBtn');
+        const cleanupBtn = document.getElementById('cleanupBtn');
+        const deleteAllBtn = document.getElementById('deleteAllBtn');
+        if (addBtn) addBtn.disabled = !!syncInProgress;
+        if (importBtn) importBtn.disabled = !!syncInProgress;
+        if (exportBtn) exportBtn.disabled = !!syncInProgress;
+        if (cleanupBtn) cleanupBtn.disabled = !!syncInProgress;
+        if (deleteAllBtn) deleteAllBtn.disabled = !!syncInProgress;
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    // Eski çözümleri temizle (veri boyutunu küçültmek için)
+    function cleanupOldSolutions(keepCount = 3) {
+      let deletedCount = 0;
+      questions.forEach(q => {
+        if (q.solutions && q.solutions.length > keepCount) {
+          const oldLength = q.solutions.length;
+          // En yeni çözümleri tut, eski olanları sil
+          q.solutions = q.solutions.slice(-keepCount);
+          deletedCount += oldLength - keepCount;
+        }
+      });
+      if (deletedCount > 0) {
+        console.log(`🗑️ ${deletedCount} eski çözüm temizlendi `);
+        saveQuestions();
+        updateStatusBar();
+        alert(`✓ ${deletedCount} eski çözüm temizlendi. Veri boyutu küçültüldü.`);
+      } else {
+        alert('Temizlenecek eski çözüm yok.');
+      }
+    }
+
+    // Yüklenen soruları normalize et ve duplicate'ları temizle
+    function normalizeLoadedQuestions(list) {
+      if (!Array.isArray(list)) return [];
+      const byId = new Map();
+      const byContent = new Map();
+
+      list.forEach(q => {
+        if (!q) return;
+        // ensure fields
+        const subject = (q.subject || '').toString().trim();
+        const topic = (q.topic || '').toString().trim();
+        const answer = (q.answer || '').toString().trim();
+
+        // prefer id-based uniqueness
+        if (q.id !== undefined && q.id !== null) {
+          const key = q.id;
+          if (!byId.has(key)) {
+            // normalize solutions array
+            if (!Array.isArray(q.solutions)) q.solutions = q.solutions ? Object.values(q.solutions) : [];
+            byId.set(key, q);
+          } else {
+            // merge solutions if duplicate id
+            const existing = byId.get(key);
+            const merged = existing.solutions.concat(q.solutions || []);
+            // dedupe solutions by date
+            const uniq = [];
+            const seen = new Set();
+            merged.forEach(s => {
+              const d = s && s.date ? s.date : JSON.stringify(s);
+              if (!seen.has(d)) { seen.add(d); uniq.push(s); }
+            });
+            existing.solutions = uniq;
+            byId.set(key, existing);
+          }
+        } else if (subject && topic && answer) {
+          // fallback to content-based uniqueness
+          const contentKey = `${subject.toLowerCase()}|${topic.toLowerCase()}|${answer.toLowerCase()}`;
+          if (!byContent.has(contentKey)) {
+            if (!Array.isArray(q.solutions)) q.solutions = q.solutions ? Object.values(q.solutions) : [];
+            byContent.set(contentKey, q);
+          } else {
+            const existing = byContent.get(contentKey);
+            const merged = existing.solutions.concat(q.solutions || []);
+            const uniq = [];
+            const seen = new Set();
+            merged.forEach(s => {
+              const d = s && s.date ? s.date : JSON.stringify(s);
+              if (!seen.has(d)) { seen.add(d); uniq.push(s); }
+            });
+            existing.solutions = uniq;
+            byContent.set(contentKey, existing);
+          }
+        }
+      });
+
+      // combine id-based and content-based results, preferring id-based
+      const result = [];
+      byId.forEach(v => result.push(v));
+      byContent.forEach(v => result.push(v));
+      return result;
+    }
+
+    // Admin: DB'deki duplicate kayıtları yedekleyip onar
+    function repairDuplicates() {
+      if (!currentUser) {
+        alert('İşlem için Firebase bağlantısı gerekli.');
+        return;
+      }
+      syncInProgress = true; updateStatusBar(); updateUIState();
+      const ref = database.ref(`users/${SHARED_UID}/questions`);
+      const ts = Date.now();
+      ref.once('value').then(snapshot => {
+        const original = snapshot.exists() ? snapshot.val() : null;
+        // Yedekle
+        database.ref(`users/${SHARED_UID}/questions_backup_${ts}`).set(original).then(() => {
+          console.log('Backup tamamlandı:', `users/${SHARED_UID}/questions_backup_${ts}`);
+        }).catch(err => console.error('Backup hatası:', err));
+
+        // Normalize et (array veya object)
+        let items = [];
+        if (Array.isArray(original)) items = original;
+        else if (original && typeof original === 'object') items = Object.values(original);
+
+        const cleaned = normalizeLoadedQuestions(items);
+
+        // build object keyed by id
+        const cleanedObj = {};
+        let counter = 0;
+        cleaned.forEach(q => {
+          let id = q.id;
+          if (id === undefined || id === null) {
+            id = Date.now() + (counter++);
+            q.id = id;
+          }
+          // ensure solutions array
+          if (!Array.isArray(q.solutions)) q.solutions = q.solutions ? Object.values(q.solutions) : [];
+          cleanedObj[id] = q;
+        });
+
+        // İlk tercih: tek seferde set etmeyi dene (hızlı)
+        ref.set(cleanedObj, (err) => {
+          if (err) {
+            console.warn('Tek seferde yazma başarısız, parça parça yazılıyor:', err);
+            // fallback: parça parça yaz
+            const keys = Object.keys(cleanedObj);
+            let done = 0;
+            keys.forEach(k => {
+              database.ref(`users/${SHARED_UID}/questions/${k}`).set(cleanedObj[k], (e) => {
+                done++;
+                if (done === keys.length) {
+                  // attempt to remove numeric keys from original array if any
+                  if (Array.isArray(original)) {
+                    // remove numeric children
+                    const removals = [];
+                    for (let i = 0; i < original.length; i++) {
+                      removals.push(database.ref(`users/${SHARED_UID}/questions/${i}`).remove());
+                    }
+                    Promise.all(removals).then(() => {
+                      syncInProgress = false; updateStatusBar(); updateUIState();
+                      alert('Onarma tamamlandı (parçalı).');
+                    }).catch(() => {
+                      syncInProgress = false; updateStatusBar(); updateUIState();
+                      alert('Onarma tamamlandı (parçalı), ancak bazı eski array anahtarları kaldı. Konsolu kontrol edin.');
+                    });
+                  } else {
+                    syncInProgress = false; updateStatusBar(); updateUIState();
+                    alert('Onarma tamamlandı (parçalı).');
+                  }
+                }
+              });
+            });
+          } else {
+            syncInProgress = false; updateStatusBar(); updateUIState();
+            alert('Onarma tamamlandı. Orijinal veri yedeklendi.');
+          }
+        });
+      }).catch(err => {
+        syncInProgress = false; updateStatusBar(); updateUIState();
+        console.error('Onarma hatası:', err);
+        alert('Onarma sırasında hata: ' + err.message);
+      });
+    }
+    
+    // Silme işlemi sırasında
+    let isDeleting = false;
+
+    // Firebase'e batch olarak kaydet (çok büyük veri için)
+    function saveQuestionsInBatches(questionsToSave) {
+      return new Promise((resolve, reject) => {
+        const BATCH_SIZE = 10; // Her batch'de 10 soru kaydet
+        let savedCount = 0;
+        let batchIndex = 0;
+        
+        const processBatch = () => {
+          if (savedCount >= questionsToSave.length) {
+            console.log(`✓ Tüm ${questionsToSave.length} soru Firebase'e kaydedildi (batch yöntemi)`);
+            resolve();
+            return;
+          }
+          
+          const start = savedCount;
+          const end = Math.min(savedCount + BATCH_SIZE, questionsToSave.length);
+          const batch = questionsToSave.slice(start, end);
+          
+          batchIndex++;
+          console.log(`Firebase batch ${batchIndex} kaydediliyor (${start+1}-${end}/${questionsToSave.length})...`);
+          
+          // Her soruyu ayrı ayrı kaydet (batch transactions yerine)
+          let completed = 0;
+          batch.forEach(q => {
+            database.ref(`users/${SHARED_UID}/questions/${q.id}`).set(q, (error) => {
+              completed++;
+              if (error) {
+                console.error(`Soru ${q.id} kaydetme hatası:`, error);
+              }
+              if (completed === batch.length) {
+                savedCount = end;
+                // Sonraki batch'i kuyruğa al
+                setTimeout(processBatch, 500);
+              }
+            });
+          });
+        };
+        
+        processBatch();
+      });
+    }
+
+    function saveQuestions() {
+      if (!currentUser || syncInProgress) {
+        // Firebase user yoksa, LocalStorage'a kaydet (test modunda, ama hata görmezden gel)
+        try {
+          localStorage.setItem('questions', JSON.stringify(questions));
+          console.log('Veriler LocalStorage\'a kaydedildi (test modu)');
+        } catch (err) {
+          // localStorage tamamen doluysa, sadece uyarı ver, uygulamayı kırma
+          console.warn('LocalStorage kayıt hatası (veri çok büyük, göz ardı ediliyor):', err.message);
+        }
+        return;
+      }
+      syncInProgress = true;
+      updateStatusBar();
+      updateUIState();
+      
+      try {
+        // Firebase'e yazılmadan önce, mevcut solutions'ları koru (silme işlemi sırasında değil)
+        database.ref(`users/${SHARED_UID}/questions`).once('value', (snapshot) => {
+          let existingData = snapshot.exists() ? snapshot.val() : [];
+          
+          // Mevcut solutions'ları MERGE et - SADECE silme işlemi harici
+          const questionsToSave = questions.map(q => {
+            const existing = existingData.find ? existingData.find(ex => ex.id === q.id) : existingData[q.id];
+            
+            // Silme işleminde değilse, eski solutions'ları merge et
+            if (existing && existing.solutions && !isDeleting) {
+              const oldSolutions = existing.solutions;
+              const newSolutions = q.solutions || [];
+              const mergedSolutions = [];
+              const addedDates = new Set();
+              
+              // Yeni solutions'ları önce ekle
+              newSolutions.forEach(s => {
+                if (s.date) addedDates.add(s.date);
+                mergedSolutions.push(s);
+              });
+              
+              // Eski solutions'ları ekle (eğer yenide yoksa)
+              oldSolutions.forEach(s => {
+                if (!addedDates.has(s.date)) {
+                  mergedSolutions.push(s);
+                }
+              });
+              
+              q.solutions = mergedSolutions;
+            }
+            return q;
+          });
+          
+          // Veri boyutunu kontrol et ve batch kaydetme kullan
+          const dataSize = JSON.stringify(questionsToSave).length;
+          console.log(`Veri boyutu: ${(dataSize / 1024 / 1024).toFixed(2)} MB (${questionsToSave.length} soru)`);
+          
+          if (dataSize > 12 * 1024 * 1024) {
+            // 12MB'dan büyükse batch kaydetme kullan
+            console.log('Veri çok büyük, batch kaydetme yöntemi kullanılıyor...');
+            saveQuestionsInBatches(questionsToSave)
+              .then(() => {
+                  syncInProgress = false;
+                  updateStatusBar();
+                  updateUIState();
+                console.log('Veriler Firebase\'e kaydedildi ✓ (batch yöntemi, toplam ' + questionsToSave.length + ' soru)');
+              })
+              .catch(err => {
+                  syncInProgress = false;
+                  updateStatusBar();
+                  updateUIState();
+                console.error('Batch kaydetme hatası:', err);
+              });
+          } else {
+            // Normal kaydetme (16MB altında)
+            database.ref(`users/${SHARED_UID}/questions`).set(questionsToSave, (error) => {
+              syncInProgress = false;
+              updateStatusBar();
+              updateUIState();
+              if (error) {
+                console.error('Firebase kayıt hatası:', error);
+                // Firebase başarısız ise, batch yöntemi ile tekrar dene
+                if (error.message && error.message.includes('too large')) {
+                  console.log('Veri hala çok büyük, batch yöntemi deneniyor...');
+                  syncInProgress = true;
+                  updateStatusBar();
+                  updateUIState();
+                  saveQuestionsInBatches(questionsToSave)
+                    .then(() => {
+                      syncInProgress = false;
+                      updateStatusBar();
+                      updateUIState();
+                      console.log('Veriler Firebase\'e batch ile kaydedildi ✓');
+                    });
+                }
+              } else {
+                console.log('Veriler Firebase\'e kaydedildi ✓ (toplam ' + questionsToSave.length + ' soru)');
+              }
+            });
+          }
+        });
+      } catch (err) {
+        syncInProgress = false;
+        console.error('saveQuestions hatası:', err);
+      }
+    }
+
+    function loadQuestionsFromFirebase() {
+      return new Promise((resolve) => {
+        // Anonim giriş yap
+        auth.signInAnonymously().then((result) => {
+          currentUser = result.user;
+          console.log('Anonim kullanıcı girişi başarılı');
+          
+          // Firebase'den soruları yükle - SHARED UID KULLAN (tüm cihazlar aynı veriyi görsün)
+          database.ref(`users/${SHARED_UID}/questions`).on('value', (snapshot) => {
+              if (snapshot.exists()) {
+              let loaded = snapshot.val();
+              // Array ise kullan, obje ise array'a dönüştür
+              if (Array.isArray(loaded)) {
+                questions = loaded;
+              } else if (typeof loaded === 'object' && loaded !== null) {
+                questions = Object.values(loaded);
+              } else {
+                questions = [];
+              }
+              // Normalize et ve duplicate'ları temizle
+              questions = normalizeLoadedQuestions(questions);
+              // Tüm sorularda solutions array'ı olduğundan emin ol
+              questions.forEach(q => {
+                if (!q.solutions) q.solutions = [];
+                if (!q.createdAt) q.createdAt = q.id; // Eski sorular için ID'yi zaman olarak kullan
+              });
+              console.log('Veriler Firebase\'den yüklendi:', questions.length, 'soru');
+              updateStatusBar();
+            } else {
+              questions = [];
+              console.log('Firebase\'de veri yok, yeni başlıyoruz');
+            }
+            loadingMessage.style.display = 'none';
+            app.style.display = 'block';
+            render();
+            resolve();
+          }, (error) => {
+            console.error('Firebase okuma hatası:', error);
+            // Fallback: localStorage'dan yükle
+            try {
+              questions = JSON.parse(localStorage.getItem('questions') || '[]');
+            } catch (e) {
+              questions = [];
+            }
+            loadingMessage.style.display = 'none';
+            app.style.display = 'block';
+            render();
+            resolve();
+          });
+        }).catch((error) => {
+          console.error('Giriş hatası:', error);
+          // Fallback: Config yanlış ise, LocalStorage'dan yükle (test modunda)
+          console.log('Firebase\'ye bağlanılamadı. LocalStorage\'dan yükleniyor (test modu)...');
+          try {
+            questions = JSON.parse(localStorage.getItem('questions') || '[]');
+          } catch (e) {
+            questions = [];
+          }
+          loadingMessage.innerHTML = '<p style="color: var(--text-light);">⚠️ Config güncellenince bulut senkronizasyonu açılacak</p>';
+          setTimeout(() => {
+            loadingMessage.style.display = 'none';
+            app.style.display = 'block';
+            render();
+          }, 2000);
+          resolve();
+        });
+      });
+    }
+
+    function render() {
+      app.innerHTML = '';
+      if (mode === 'add') renderAdd();
+      else if (mode === 'solve') renderSolve();
+      else if (mode === 'history') renderHistory();
+      else if (mode === 'exam') renderExam();
+      else if (mode === 'examResult') renderExamResult();
+      else renderList();
+      // Status bar ve UI durumunu güncelle
+      setTimeout(() => { updateStatusBar(); updateUIState(); }, 100);
+    }
+
+    function renderList() {
+      // Mevcut ders ve konuları çıkar
+      const subjects = [...new Set(questions.map(q => q.subject))].filter(Boolean);
+      const topics = [...new Set(questions.map(q => q.topic))].filter(Boolean);
+      const div = document.createElement('div');
+      div.innerHTML = `
+        <div style="margin-bottom:12px;">
+          <button class="btn" id="addBtn">Yeni Soru Ekle</button>
+          <button class="btn" id="exportBtn">Soruları Dışa Aktar</button>
+          <button class="btn" id="importBtn">Soruları İçe Aktar</button>
+          <button class="btn" id="repairBtn" style="background:#ff8c00;">🔧 Çoğaltmaları Onar</button>
+          <button class="btn" id="cleanupBtn" style="background: var(--danger);">🗑️ Eski Çözümleri Temizle</button>
+          <button class="btn" id="deleteAllBtn" style="background: #cc0000; font-weight: bold;">🚫 TÜM SORULARI SİL</button>
+          <input type="file" id="importFile" accept="application/json" style="display:none" />
+        </div>
+        <h2>Soru Listesi</h2>
+        <div>
+          <input class="input" id="filterSubject" list="filterSubjectList" placeholder="Ders" />
+          <datalist id="filterSubjectList">
+            ${subjects.map(s => `<option value="${s}">`).join('')}
+          </datalist>
+          <input class="input" id="filterTopic" list="filterTopicList" placeholder="Konu" />
+          <datalist id="filterTopicList">
+            ${topics.map(t => `<option value="${t}">`).join('')}
+          </datalist>
+          <select class="input" id="filterLevel">
+            <option value="">Seviye (Tümü)</option>
+            <option value="3">3 (Zor)</option>
+            <option value="2">2 (Orta)</option>
+            <option value="1">1 (Kolay)</option>
+          </select>
+          <select class="input" id="sortSelect" style="background:var(--accent); color:#222; font-weight:bold;">
+            <option value="newest">📥 Son Eklenenler Üstte</option>
+            <option value="oldest">📤 İlk Eklenenler Üstte</option>
+            <option value="mostSolved">🎯 En Çok Çözüm</option>
+          </select>
+          <input class="input" id="filterCount" type="number" min="1" max="50" value="5" style="width:60px" />
+          <button class="btn" id="examBtn">Sadece Soruları Çöz</button>
+          <button class="btn" id="filterBtn">Filtrele</button>
+        </div>
+        <div class="question-list" id="questionList"></div>
+      `;
+      app.appendChild(div);
+      // Event handler'ları ekle
+      const addBtnEl = document.getElementById('addBtn');
+      if (addBtnEl) {
+        addBtnEl.onclick = () => {
+          if (syncInProgress) { alert('Senkronizasyon sürüyor, lütfen bekleyin.'); return; }
+          mode = 'add'; render();
+        };
+        addBtnEl.disabled = !!syncInProgress;
+      }
+      document.getElementById('exportBtn').onclick = () => {
+        const data = JSON.stringify(questions, null, 2);
+        const blob = new Blob([data], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'sorular.json';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+      };
+      document.getElementById('importBtn').onclick = () => {
+        document.getElementById('importFile').click();
+      };
+      document.getElementById('repairBtn').onclick = () => {
+        if (!confirm('Veritabanındaki duplicate kayıtlar taranıp birleştirilecek ve orijinal veri yedeklenecek. Devam edilsin mi?')) return;
+        repairDuplicates();
+      };
+      document.getElementById('importFile').onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const imported = JSON.parse(ev.target.result);
+            if (Array.isArray(imported)) {
+              let added = 0;
+              let duplicateIds = 0;
+              let duplicateContent = 0;
+              let invalid = 0;
+              
+              imported.forEach(q => {
+                // Gerekli alanları kontrol et
+                if (!q.subject || !q.topic || !q.answer) {
+                  invalid++;
+                  return;
+                }
+                
+                // ID kontrolü
+                const idExists = questions.some(qq => qq.id === q.id);
+                if (idExists) {
+                  duplicateIds++;
+                  return;
+                }
+                
+                // İçerik kontrolü (tam eşleşme - hepsi dolmak zorunda)
+                const contentExists = questions.some(qq => 
+                  qq.subject && qq.topic && qq.answer &&
+                  qq.subject.trim().toLowerCase() === q.subject.trim().toLowerCase() && 
+                  qq.topic.trim().toLowerCase() === q.topic.trim().toLowerCase() && 
+                  qq.answer.trim().toLowerCase() === q.answer.trim().toLowerCase()
+                );
+                if (contentExists) {
+                  duplicateContent++;
+                  return;
+                }
+                
+                // Her ikisi de yeni ise ekle
+                questions.push(q);
+                added++;
+              });
+              
+              saveQuestions();
+              let message = '';
+              if (added > 0) {
+                message += `✓ ${added} yeni soru eklendi\n`;
+              }
+              if (duplicateIds > 0) {
+                message += `⚠️ ${duplicateIds} soru (aynı ID) zaten var\n`;
+              }
+              if (duplicateContent > 0) {
+                message += `⚠️ ${duplicateContent} soru (aynı içerik) zaten var\n`;
+              }
+              if (invalid > 0) {
+                message += `❌ ${invalid} soru (eksik Ders/Konu/Cevap) geçersiz\n`;
+              }
+              if (added === 0 && duplicateIds === 0 && duplicateContent === 0 && invalid === 0) {
+                message = 'İçe aktarılacak yeni soru yok.';
+              }
+              alert(message);
+              render();
+            } else {
+              alert('Geçersiz dosya!');
+            }
+          } catch (err) {
+            alert('Dosya okunurken hata:\n' + err.message);
+          }
+        };
+        reader.readAsText(file);
+      };
+      // Eski çözümleri temizle
+      document.getElementById('cleanupBtn').onclick = () => {
+        if (confirm('Tüm sorularda 3 en yeni çözümü tutarak eski çözümleri silecek. Devam et?')) {
+          cleanupOldSolutions(3);
+        }
+      };
+      // Tüm soruları sil
+      document.getElementById('deleteAllBtn').onclick = () => {
+        if (confirm('⚠️ TÜM SORULAR SİLİNECEK! Emin misiniz?\n\nBu işlem geri alınamaz!')) {
+          if (confirm('EVET, tüm sorularımı sil')) {
+            questions = [];
+            isDeleting = true;
+            saveQuestions();
+            setTimeout(() => {
+              isDeleting = false;
+              alert('✓ Tüm sorular silindi.');
+              render();
+            }, 1000);
+          }
+        }
+      };
+      // Sadece Soruları Çöz (sınav başlatır)
+      document.getElementById('examBtn').onclick = () => {
+        let subject = document.getElementById('filterSubject').value.trim().toLowerCase();
+        let topic = document.getElementById('filterTopic').value.trim().toLowerCase();
+        let level = document.getElementById('filterLevel').value;
+        let count = parseInt(document.getElementById('filterCount').value) || 5;
+        let filtered = questions.filter(q =>
+          (!subject || (q.subject && q.subject.toLowerCase().includes(subject))) &&
+          (!topic || (q.topic && q.topic.toLowerCase().includes(topic))) &&
+          (!level || q.level == level)
+        );
+        filtered = filtered.sort(() => Math.random() - 0.5).slice(0, count);
+        if (filtered.length === 0) { alert('Soru bulunamadı!'); return; }
+        examQuestions = filtered;
+        examIndex = 0;
+        examResults = [];
+        examStartTime = window.performance.now();
+        console.log('💚 Sınav başladı, zaman:', examStartTime);
+        mode = 'exam';
+        render();
+      };
+      // Filtrele (sadece listeyi filtreler)
+      document.getElementById('filterBtn').onclick = () => {
+        let subject = document.getElementById('filterSubject').value.trim().toLowerCase();
+        let topic = document.getElementById('filterTopic').value.trim().toLowerCase();
+        let level = document.getElementById('filterLevel').value;
+        let filtered = questions.filter(q =>
+          (!subject || (q.subject && q.subject.toLowerCase().includes(subject))) &&
+          (!topic || (q.topic && q.topic.toLowerCase().includes(topic))) &&
+          (!level || q.level == level)
+        );
+        renderQuestionList(filtered);
+      };
+      // Sıralama seçeneği
+      document.getElementById('sortSelect').onchange = (e) => {
+        sortOption = e.target.value;
+        let subject = document.getElementById('filterSubject').value.trim().toLowerCase();
+        let topic = document.getElementById('filterTopic').value.trim().toLowerCase();
+        let level = document.getElementById('filterLevel').value;
+        let filtered = questions.filter(q =>
+          (!subject || (q.subject && q.subject.toLowerCase().includes(subject))) &&
+          (!topic || (q.topic && q.topic.toLowerCase().includes(topic))) &&
+          (!level || q.level == level)
+        );
+        renderQuestionList(filtered);
+      };
+      renderQuestionList(questions);
+    }
+
+    function renderQuestionList(list) {
+      const qDiv = document.getElementById('questionList');
+      qDiv.innerHTML = '';
+      
+      // Sıralama yap
+      let sorted = [...list];
+      if (sortOption === 'newest') {
+        // Son eklenenler üstte
+        sorted.sort((a, b) => (b.createdAt || b.id) - (a.createdAt || a.id));
+      } else if (sortOption === 'oldest') {
+        // İlk eklenenler üstte
+        sorted.sort((a, b) => (a.createdAt || a.id) - (b.createdAt || b.id));
+      } else if (sortOption === 'mostSolved') {
+        // En çok çözüm sayısına göre
+        sorted.sort((a, b) => (b.solutions?.length || 0) - (a.solutions?.length || 0));
+      }
+      
+      // Soru sayısını gösteren başlık ekle
+      if (sorted.length > 0) {
+        const countDiv = document.createElement('div');
+        countDiv.style.cssText = 'color: var(--accent); font-weight: bold; margin-bottom: 12px; font-size: 1.1rem;';
+        countDiv.textContent = `${sorted.length} soru bulundu`;
+        qDiv.appendChild(countDiv);
+      } else {
+        const noResultDiv = document.createElement('div');
+        noResultDiv.style.cssText = 'color: var(--text-light); text-align: center; padding: 20px; font-size: 1rem;';
+        noResultDiv.textContent = 'Soru bulunamadı';
+        qDiv.appendChild(noResultDiv);
+        return;
+      }
+      sorted.forEach(q => {
+        const item = document.createElement('div');
+        item.className = 'question-item';
+        item.innerHTML = `
+          <img src="${q.img}" class="question-img" />
+          <div>
+            <div><b>Ders:</b> ${q.subject}</div>
+            <div><b>Konu:</b> ${q.topic}</div>
+            <div><b>Cevap:</b> ${q.answer}</div>
+            <div><b>Çözümler:</b> ${q.solutions?.length || 0}</div>
+            <div><b>Seviye:</b> ${q.level}</div>
+            <button class="btn" onclick="selected=${q.id}; mode='solve'; render()">Çöz</button>
+            <button class="btn" onclick="selected=${q.id}; mode='history'; render()">Geçmiş</button>
+            <button class="btn" style="background:var(--danger);color:#fff;" onclick="deleteQuestion(${q.id})">Sil</button>
+          </div>
+        `;
+        qDiv.appendChild(item);
+      });
+      // Soru silme fonksiyonu global olarak eklenmeli
+      window.deleteQuestion = function(qid) {
+        if (confirm('Bu soruyu silmek istediğinize emin misiniz?')) {
+          questions = questions.filter(q => q.id !== qid);
+          saveQuestions();
+          render();
+        }
+      };
+    }
+
+    function renderAdd() {
+      // Mevcut ders ve konuları çıkar
+      const subjects = [...new Set(questions.map(q => q.subject))].filter(Boolean);
+      const topics = [...new Set(questions.map(q => q.topic))].filter(Boolean);
+      const div = document.createElement('div');
+      div.innerHTML = `
+        <h2>Yeni Soru Ekle</h2>
+        <form id="addForm">
+          <input class="input" type="file" id="imgInput" accept="image/*" required /><br>
+          <input class="input" list="subjectList" type="text" id="subjectInput" placeholder="Ders" value="${lastSubject}" required /><br>
+          <datalist id="subjectList">
+            ${subjects.map(s => `<option value="${s}">`).join('')}
+          </datalist>
+          <input class="input" list="topicList" type="text" id="topicInput" placeholder="Konu" value="${lastTopic}" required /><br>
+          <datalist id="topicList">
+            ${topics.map(t => `<option value="${t}">`).join('')}
+          </datalist>
+          <div style="margin: 12px 0; padding: 12px; background: #333a4d; border-radius: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
+            <span style="width: 100%; color: var(--text-light); font-size: 0.9rem;">Cevap Seçin:</span>
+            ${['A', 'B', 'C', 'D', 'E'].map(letter => `
+              <button type="button" class="btn answer-btn" data-answer="${letter}" style="flex: 1; min-width: 60px; ${selectedAnswer === letter ? 'background: var(--accent); color: #222;' : ''}">
+                ${letter}
+              </button>
+            `).join('')}
+            <input type="hidden" id="answerInput" value="${selectedAnswer || ''}" />
+          </div>
+          <button class="btn" type="submit">Ekle</button>
+          <button class="btn" type="button" onclick="mode='list'; render()">Geri</button>
+        </form>
+        <div id="previewImg"></div>
+        <h3>Eklenen Sorular (Bu Oturum)</h3>
+        <div id="addedList" class="question-list"></div>
+      `;
+      app.appendChild(div);
+      const imgInput = document.getElementById('imgInput');
+      imgInput.onchange = e => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = ev => {
+            document.getElementById('previewImg').innerHTML = `<img src='${ev.target.result}' class='question-img' />`;
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+      // Cevap butonları event handler
+      document.querySelectorAll('.answer-btn').forEach(btn => {
+        btn.onclick = (e) => {
+          e.preventDefault();
+          selectedAnswer = btn.dataset.answer;
+          document.getElementById('answerInput').value = selectedAnswer;
+          document.querySelectorAll('.answer-btn').forEach(b => b.style.background = '');
+          document.querySelectorAll('.answer-btn').forEach(b => b.style.color = '');
+          btn.style.background = 'var(--accent)';
+          btn.style.color = '#222';
+        };
+      });
+      // Paste event handler - Ctrl+V ile görsel ekle
+      document.addEventListener('paste', e => {
+        const items = e.clipboardData.items;
+        for (let item of items) {
+          if (item.kind === 'file' && item.type.startsWith('image/')) {
+            const file = item.getAsFile();
+            const reader = new FileReader();
+            reader.onload = ev => {
+              document.getElementById('previewImg').innerHTML = `<img src='${ev.target.result}' class='question-img' />`;
+              // Dosya input'a ekle
+              const dataTransfer = new DataTransfer();
+              dataTransfer.items.add(file);
+              imgInput.files = dataTransfer.files;
+            };
+            reader.readAsDataURL(file);
+          }
+        }
+      });
+      document.getElementById('addForm').onsubmit = e => {
+        e.preventDefault();
+        if (syncInProgress) { alert('Senkronizasyon sürüyor, lütfen daha sonra tekrar deneyin.'); return; }
+        const file = imgInput.files[0];
+        if (!file) return;
+        const answer = document.getElementById('answerInput').value;
+        if (!answer) {
+          alert('Lütfen cevap seçiniz!');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = ev => {
+          const q = {
+            id: Date.now(),
+            img: ev.target.result,
+            subject: document.getElementById('subjectInput').value,
+            topic: document.getElementById('topicInput').value,
+            answer: answer,
+            level: 3,
+            solutions: [],
+            createdAt: Date.now()
+          };
+          // Son kullanılan ders ve konuyu kaydet
+          lastSubject = q.subject;
+          lastTopic = q.topic;
+          questions.push(q);
+          saveQuestions();
+          // Oturum içi listeye ekle ve formu temizle, kullanıcı eklemeye devam edebilsin
+          addedThisSession.push(q);
+          selectedAnswer = null;
+          // Temizle: dosya input, önizleme ve cevap butonları
+          imgInput.value = '';
+          document.getElementById('previewImg').innerHTML = '';
+          document.getElementById('answerInput').value = '';
+          document.querySelectorAll('.answer-btn').forEach(b => { b.style.background = ''; b.style.color = ''; });
+          // Added list'i güncelle
+          const addedListEl = document.getElementById('addedList');
+          if (addedListEl) updateAddedList();
+        };
+        reader.readAsDataURL(file);
+      };
+
+      // Eklenenleri altta gösteren helper
+      function updateAddedList() {
+        const addedListEl = document.getElementById('addedList');
+        if (!addedListEl) return;
+        addedListEl.innerHTML = '';
+        if (!addedThisSession.length) {
+          addedListEl.innerHTML = '<div style="color:var(--text-light);">Henüz bu oturumda eklenen soru yok.</div>';
+          return;
+        }
+        addedThisSession.slice().reverse().forEach(q => {
+          const item = document.createElement('div');
+          item.className = 'question-item';
+          item.style.alignItems = 'flex-start';
+          item.innerHTML = `
+            <img src="${q.img}" class="question-img" style="width:120px;height:auto;" />
+            <div>
+              <div><b>Ders:</b> ${q.subject}</div>
+              <div><b>Konu:</b> ${q.topic}</div>
+              <div><b>Cevap:</b> ${q.answer}</div>
+            </div>
+          `;
+          addedListEl.appendChild(item);
+        });
+      }
+      // İlk render
+      updateAddedList();
+    }
+
+    function renderSolve() {
+      const q = questions.find(x => x.id == selected);
+      if (!q) { mode = 'list'; render(); return; }
+      let selectedChoice = null;
+      let feedbackDiv = null;
+      const div = document.createElement('div');
+        div.innerHTML = `
+          <h2>Soru Çözümü</h2>
+           <div style="margin-bottom:8px; display:flex; align-items:center; flex-wrap:wrap; gap:8px;">
+             <label style="margin-right:8px;">Kalem Rengi:</label>
+             <span id="paletteArea"></span>
+             <input type="color" id="penColor" value="#5b8cff" style="width:32px; height:32px; vertical-align:middle; background: none; border:none; outline:none;">
+             <button class="btn" id="clearBtn" style="padding:4px 12px;">Tümünü Temizle</button>
+           </div>
+          <div style="position:relative; display:inline-block; width:800px; height:500px;">
+            <canvas id="drawCanvas" width="800" height="500" style="position:absolute; left:0; top:0; z-index:2; background:transparent;${q.img ? `background-image:url('${q.img}');background-size:contain;background-repeat:no-repeat;background-position:center;` : ''}"></canvas>
+          </div>
+          <div id="choicesArea" style="margin: 12px 0;"></div>
+          <div id="feedbackArea"></div>
+          <button class="btn" id="saveSolution">Çözümü Kaydet</button>
+          <button class="btn" onclick="mode='list'; render()">Geri</button>
+        `;
+      app.appendChild(div);
+      const canvas = document.getElementById('drawCanvas');
+      let currentColor = '#5b8cff';
+      const pad = new SignaturePad(canvas, { penColor: currentColor, backgroundColor: 'rgba(0,0,0,0)' });
+      // Renk paleti
+      const palette = ['#5b8cff','#ff5c5c','#ffb347','#4caf50','#a259ff','#fff','#222'];
+      const paletteArea = document.getElementById('paletteArea');
+      palette.forEach(color => {
+        const btn = document.createElement('button');
+        btn.className = 'palette-btn';
+        btn.style.background = color;
+        btn.onclick = () => {
+          currentColor = color;
+          pad.penColor = currentColor;
+          document.querySelectorAll('.palette-btn').forEach(b=>b.classList.remove('selected'));
+          btn.classList.add('selected');
+        };
+        if(color===currentColor) btn.classList.add('selected');
+        paletteArea.appendChild(btn);
+      });
+      document.getElementById('penColor').oninput = function() {
+        currentColor = this.value;
+        pad.penColor = currentColor;
+        document.querySelectorAll('.palette-btn').forEach(b=>b.classList.remove('selected'));
+      };
+      document.getElementById('clearBtn').onclick = function() {
+        pad.clear();
+      };
+      // Şıklar otomatik algılansın: Cevap A, B, C, D, E ise şıklar göster
+      const choices = ['A', 'B', 'C', 'D', 'E'];
+      const choicesArea = document.getElementById('choicesArea');
+      choices.forEach(ch => {
+        const btn = document.createElement('button');
+        btn.textContent = ch;
+        btn.className = 'btn';
+        btn.style.background = '#fff';
+        btn.style.color = '#1976d2';
+        btn.onclick = () => {
+          selectedChoice = ch;
+          // Tüm butonları sıfırla
+          Array.from(choicesArea.children).forEach(b => { b.style.background = '#fff'; b.style.color = '#1976d2'; });
+          btn.style.background = '#1976d2'; btn.style.color = '#fff';
+        };
+        choicesArea.appendChild(btn);
+      });
+      feedbackDiv = document.getElementById('feedbackArea');
+      document.getElementById('saveSolution').onclick = () => {
+        if (!selectedChoice) { alert('Bir şık seçiniz!'); return; }
+        
+        // Her işlemde soruyu questions array'ından yeniden al (Firebase listener için)
+        const currentQ = questions.find(x => x.id == selected);
+        if (!currentQ) { alert('Soru bulunamadı!'); return; }
+        
+        const isCorrect = selectedChoice.toUpperCase() === currentQ.answer.trim().toUpperCase();
+        const solution = {
+          draw: pad.toDataURL(),
+          isCorrect,
+          selected: selectedChoice,
+          date: new Date().toISOString()
+        };
+        currentQ.solutions.push(solution);
+        
+        // Canvas ve butonları disable et
+        canvas.style.pointerEvents = 'none';
+        canvas.style.opacity = '0.5';
+        document.getElementById('saveSolution').style.display = 'none';
+        document.getElementById('clearBtn').style.display = 'none';
+        document.querySelectorAll('.palette-btn').forEach(b => b.disabled = true);
+        
+        // Renk picker disable
+        document.getElementById('penColor').disabled = true;
+        
+        // Şık butonlarını disable (seçim bitti)
+        Array.from(choicesArea.children).forEach(b => { b.disabled = true; b.style.opacity = '0.6'; });
+        
+        const feedbackContent = isCorrect ? `
+          <div style="background:#4caf50; color:#fff; padding:16px; border-radius:8px; margin:12px 0; font-weight:bold; font-size:1.1rem; text-align:center;">
+            ✅ Doğru çözdünüz!
+          </div>
+          <div style="background:#333a4d; padding:12px; border-radius:8px; margin:12px 0; border-left:4px solid #4caf50;">
+            <div><b>Seçiminiz:</b> ${selectedChoice}</div>
+            <div><b>Doğru Cevap:</b> ${currentQ.answer}</div>
+          </div>
+          <div style="display:flex; gap:8px; margin-top:12px;">
+            <button class="btn" onclick="mode='list'; render()" style="flex:1;">Ana Sayfaya Dön</button>
+            <button class="btn" onclick="selected=${currentQ.id}; mode='history'; render()" style="background:var(--accent); color:#222; flex:1;">Çözüm Geçmişine Git</button>
+          </div>
+        ` : `
+          <div style="background:#ff5c5c; color:#fff; padding:16px; border-radius:8px; margin:12px 0; font-weight:bold; font-size:1.1rem; text-align:center;">
+            ❌ Yanlış!
+          </div>
+          <div style="background:#333a4d; padding:12px; border-radius:8px; margin:12px 0; border-left:4px solid #ff5c5c;">
+            <div><b>Seçiminiz:</b> ${selectedChoice}</div>
+            <div><b>Doğru Cevap:</b> <span style="color:#4caf50; font-weight:bold;">${currentQ.answer}</span></div>
+          </div>
+          <div style="display:flex; gap:8px; margin-top:12px;">
+            <button class="btn" onclick="mode='list'; render()" style="flex:1;">Ana Sayfaya Dön</button>
+            <button class="btn" onclick="selected=${currentQ.id}; mode='history'; render()" style="background:var(--accent); color:#222; flex:1;">Çözüm Geçmişine Git</button>
+          </div>
+        `;
+        
+        if (isCorrect) {
+          if (currentQ.level > 1) currentQ.level--;
+        }
+        
+        feedbackDiv.innerHTML = feedbackContent;
+        
+        // Scroll feedback'e göster
+        setTimeout(() => {
+          feedbackDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 100);
+        
+        saveQuestions();
+      };
+    }
+
+    function renderHistory() {
+      const q = questions.find(x => x.id == selected);
+      if (!q) { mode = 'list'; render(); return; }
+      const div = document.createElement('div');
+      div.innerHTML = `
+        <h2>Çözüm Geçmişi</h2>
+        <img src="${q.img}" class="question-img" />
+        <div><b>Ders:</b> ${q.subject} <b>Konu:</b> ${q.topic} <b>Seviye:</b>
+          <select id="levelSelect" class="input" style="width:70px; display:inline-block;">
+            <option value="1" ${q.level==1?'selected':''}>1 (Kolay)</option>
+            <option value="2" ${q.level==2?'selected':''}>2 (Orta)</option>
+            <option value="3" ${q.level==3?'selected':''}>3 (Zor)</option>
+          </select>
+        </div>
+        <div class="solution-history" id="solutionHistory"></div>
+        <button class="btn" onclick="mode='list'; render()">Geri</button>
+      `;
+            // Seviye değişikliği event'i
+            setTimeout(() => {
+              const sel = document.getElementById('levelSelect');
+              if (sel) {
+                sel.onchange = function() {
+                  q.level = parseInt(this.value);
+                  saveQuestions();
+                  render();
+                };
+              }
+            }, 0);
+      app.appendChild(div);
+      const histDiv = document.getElementById('solutionHistory');
+      if (!q.solutions.length) {
+        histDiv.innerHTML = '<i>Henüz çözüm yok.</i>';
+        return;
+      }
+      q.solutions.forEach((sol, i) => {
+        const sDiv = document.createElement('div');
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn';
+        deleteBtn.style.cssText = 'padding:2px 8px; font-size:12px; float:right;';
+        deleteBtn.textContent = 'Sil';
+        deleteBtn.onclick = (e) => {
+          e.stopPropagation();
+          if (isDeleting) return; // İkili silme'yi engelle
+          isDeleting = true;
+          if (confirm('Bu çözümü silmek istediğinize emin misiniz?')) {
+            const q = questions.find(x => x.id === selected);
+            if (q && q.solutions[i]) {
+              q.solutions.splice(i, 1);
+              saveQuestions();
+              setTimeout(() => { render(); }, 200);
+            }
+          }
+          setTimeout(() => { isDeleting = false; }, 300);
+        };
+        
+        const headerDiv = document.createElement('div');
+        headerDiv.textContent = `${sol.isCorrect ? 'Doğru' : 'Yanlış'} - ${new Date(sol.date).toLocaleString()} `;
+        headerDiv.appendChild(deleteBtn);
+        sDiv.appendChild(headerDiv);
+        
+        // Overlay: question image + solution drawing
+        const overlayDiv = document.createElement('div');
+        overlayDiv.style.position = 'relative';
+        overlayDiv.style.width = '800px';
+        overlayDiv.style.height = '500px';
+        overlayDiv.style.marginBottom = '8px';
+        overlayDiv.style.background = '#fff';
+        if (q.img) {
+          const img = document.createElement('img');
+          img.src = q.img;
+          img.style.position = 'absolute';
+          img.style.left = '0';
+          img.style.top = '0';
+          img.style.zIndex = '1';
+          img.style.width = '800px';
+          img.style.height = '500px';
+          img.style.objectFit = 'contain';
+          img.style.background = '#fff';
+          overlayDiv.appendChild(img);
+        }
+        const c = document.createElement('img');
+        c.src = sol.draw;
+        c.className = 'solution-canvas';
+        c.style.position = 'absolute';
+        c.style.left = '0';
+        c.style.top = '0';
+        c.style.zIndex = '2';
+        c.style.width = '800px';
+        c.style.height = '500px';
+        c.style.pointerEvents = 'none';
+        overlayDiv.appendChild(c);
+        sDiv.appendChild(overlayDiv);
+        histDiv.appendChild(sDiv);
+      });
+    }
+
+    function renderExam() {
+      if (examIndex >= examQuestions.length) {
+        mode = 'examResult';
+        render();
+        return;
+      }
+      const q = examQuestions[examIndex];
+      let selectedChoice = null;
+      let feedbackDiv = null;
+      app.innerHTML = '';
+      const div = document.createElement('div');
+      
+      function updateTimer() {
+        if (examStartTime === null || examStartTime === undefined) return;
+        const elapsed = Math.floor((window.performance.now() - examStartTime) / 1000);
+        const minutes = Math.floor(elapsed / 60);
+        const seconds = elapsed % 60;
+        const timerEl = document.getElementById('examTimer');
+        if (timerEl) {
+          timerEl.innerHTML = `⏱️ <b>${minutes}:${seconds.toString().padStart(2, '0')}</b>`;
+        }
+      }
+      
+      div.innerHTML = `
+        <h2>Sınav Modu (${examIndex+1}/${examQuestions.length}) - <span id="examTimer" style="color:var(--accent);">⏱️ <b>0:00</b></span></h2>
+        <div style="margin-bottom:8px; display:flex; align-items:center; flex-wrap:wrap; gap:8px;">
+          <label style="margin-right:8px;">Kalem Rengi:</label>
+          <span id="paletteArea"></span>
+          <input type="color" id="penColor" value="#5b8cff" style="width:32px; height:32px; vertical-align:middle; background: none; border:none; outline:none;">
+          <button class="btn" id="clearBtn" style="padding:4px 12px;">Tümünü Temizle</button>
+        </div>
+        <div style="position:relative; display:inline-block; width:800px; height:500px;">
+          <canvas id="drawCanvas" width="800" height="500" style="position:absolute; left:0; top:0; z-index:2; background:transparent;${q.img ? `background-image:url('${q.img}');background-size:contain;background-repeat:no-repeat;background-position:center;` : ''}"></canvas>
+        </div>
+        <div id="choicesArea" style="margin: 12px 0;"></div>
+        <div id="feedbackArea"></div>
+        <button class="btn" id="nextBtn">Sonraki Soru</button>
+        <button class="btn" onclick="mode='list'; render()">Vazgeç</button>
+      `;
+      app.appendChild(div);
+      const canvas = document.getElementById('drawCanvas');
+      let currentColor = '#5b8cff';
+      const pad = new SignaturePad(canvas, { penColor: currentColor, backgroundColor: 'rgba(0,0,0,0)' });
+      // Renk paleti
+      const palette = ['#5b8cff','#ff5c5c','#ffb347','#4caf50','#a259ff','#fff','#222'];
+      const paletteArea = document.getElementById('paletteArea');
+      palette.forEach(color => {
+        const btn = document.createElement('button');
+        btn.className = 'palette-btn';
+        btn.style.background = color;
+        btn.onclick = () => {
+          currentColor = color;
+          pad.penColor = currentColor;
+          document.querySelectorAll('.palette-btn').forEach(b=>b.classList.remove('selected'));
+          btn.classList.add('selected');
+        };
+        if(color===currentColor) btn.classList.add('selected');
+        paletteArea.appendChild(btn);
+      });
+      document.getElementById('penColor').oninput = function() {
+        currentColor = this.value;
+        pad.penColor = currentColor;
+        document.querySelectorAll('.palette-btn').forEach(b=>b.classList.remove('selected'));
+      };
+      document.getElementById('clearBtn').onclick = function() {
+        pad.clear();
+      };
+      const choices = ['A', 'B', 'C', 'D', 'E'];
+      const choicesArea = document.getElementById('choicesArea');
+      choices.forEach(ch => {
+        const btn = document.createElement('button');
+        btn.textContent = ch;
+        btn.className = 'btn';
+        btn.style.background = '#fff';
+        btn.style.color = '#1976d2';
+        btn.onclick = () => {
+          selectedChoice = ch;
+          Array.from(choicesArea.children).forEach(b => { b.style.background = '#fff'; b.style.color = '#1976d2'; });
+          btn.style.background = '#1976d2'; btn.style.color = '#fff';
+        };
+        choicesArea.appendChild(btn);
+      });
+      feedbackDiv = document.getElementById('feedbackArea');
+      document.getElementById('nextBtn').onclick = () => {
+        if (!selectedChoice) { alert('Bir şık seçiniz!'); return; }
+        
+        // Her işlemde soruyu questions array'ından yeniden al (Firebase listener için)
+        const realQ = questions.find(qq => qq.id === q.id);
+        const isCorrect = selectedChoice.toUpperCase() === (realQ?.answer || q.answer).trim().toUpperCase();
+        
+        if (isCorrect) {
+          // Sınavda doğruysa seviye düşsün (min 1)
+          if (realQ && realQ.level > 1) realQ.level--;
+        }
+        
+        examResults.push({
+          question: q,
+          selected: selectedChoice,
+          isCorrect,
+          draw: pad.toDataURL(),
+        });
+        saveQuestions();
+        examIndex++;
+        render();
+      };
+      
+      // Timer'ı başlat
+      if (timerInterval) clearInterval(timerInterval);
+      updateTimer();
+      timerInterval = setInterval(updateTimer, 1000);
+    }
+
+    function renderExamResult() {
+      // Timer'ı durdur
+      if (timerInterval) clearInterval(timerInterval);
+      
+      // Toplam zamanı hesapla - milisaniyeden saniyeye çevir
+      let totalSeconds = 0;
+      if (examStartTime !== null && examStartTime !== undefined) {
+        totalSeconds = Math.floor((window.performance.now() - examStartTime) / 1000);
+        console.log('⏱️ Geçen süre (sn):', totalSeconds, 'dakika:', Math.floor(totalSeconds / 60));
+      }
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      const timeText = `${minutes} dakika ${seconds} saniye`;
+      
+      // Save all solutions (correct and wrong) to question history
+      examResults.forEach(r => {
+        const q = questions.find(x => x.id === r.question.id);
+        if (q) {
+          q.solutions.push({
+            draw: r.draw,
+            isCorrect: r.isCorrect,
+            selected: r.selected,
+            date: new Date().toISOString()
+          });
+        }
+      });
+      saveQuestions();
+      app.innerHTML = '';
+      const div = document.createElement('div');
+      const correct = examResults.filter(r => r.isCorrect);
+      const wrong = examResults.filter(r => !r.isCorrect);
+      div.innerHTML = `
+        <h2>Sınav Sonucu</h2>
+        <div style="font-size:1.2rem; margin:16px 0; padding:12px; background:var(--bg-main); border-radius:8px;">
+          ⏱️ <b>Toplam Zaman: ${timeText}</b>
+        </div>
+        <div style="margin:12px 0;">Doğru: <b style="color:green;">${correct.length}</b> / Yanlış: <b style="color:red;">${wrong.length}</b></div>
+        <h3>Yanlış Yaptıkların</h3>
+        <ul>${wrong.map(r => `
+          <li>
+            <b>${r.question.subject} / ${r.question.topic}</b> - Cevap: ${r.question.answer} - Senin seçimin: ${r.selected}<br>
+            <div style="position:relative; width:300px; height:200px; margin-bottom:8px;">
+              ${r.question.img ? `<img src='${r.question.img}' style='position:absolute; left:0; top:0; z-index:1; width:300px; height:200px; object-fit:contain; background:#fff;' />` : ''}
+              <img src='${r.draw}' style='position:absolute; left:0; top:0; z-index:2; width:300px; height:200px; pointer-events:none;' />
+            </div>
+          </li>`).join('')}</ul>
+        <h3>Doğru Yaptıkların</h3>
+        <ul>${correct.map(r => `<li><b>${r.question.subject} / ${r.question.topic}</b> - Cevap: ${r.question.answer}</li>`).join('')}</ul>
+        <button class="btn" onclick="mode='list'; render()">Ana Sayfa</button>
+      `;
+      app.appendChild(div);
+    }
+
+    // Firebase'den verileri yükle ve uygulamayı başlat
+    loadQuestionsFromFirebase();
+  </script>
+</body>
+</html>
